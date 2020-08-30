@@ -38,8 +38,9 @@ func downloadFile(ctx context.Context, c *sync.Cond, wg *sync.WaitGroup, url str
 		ctx = context.WithValue(ctx, downloadError, err)
 		return
 	}
+	log(file.Name() + ` has created`)
 	defer file.Close()
-
+	log(`start downloading ` + url)
 	resp, err := http.Get(url)
 	if err != nil {
 		log(err)

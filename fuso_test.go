@@ -13,5 +13,5 @@ func TestSimpleSingleDownload(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	time.Sleep(30000)
+	time.Sleep(60 * time.Second)
 }
