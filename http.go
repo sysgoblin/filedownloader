@@ -29,8 +29,9 @@ func getFileSize(url string) (int64, error) {
 }
 
 // Download Single File
-func downloadFile(ctx context.Context, c *sync.Cond, url string, localFilePath string, downloadedBytes chan int) {
+func downloadFile(ctx context.Context, c *sync.Cond, wg *sync.WaitGroup, url string, localFilePath string, downloadedBytes chan int) {
 	defer c.Signal()
+	defer wg.Done()
 	file, err := os.Create(localFilePath)
 	if err != nil {
 		log(err)
@@ -40,8 +41,13 @@ func downloadFile(ctx context.Context, c *sync.Cond, url string, localFilePath s
 	defer file.Close()
 
 	resp, err := http.Get(url)
-	readSource := &responseReader{Reader: resp.Body, readBytes: downloadedBytes}
+	if err != nil {
+		log(err)
+		return
+	}
+	defer resp.Body.Close()
 
+	readSource := &responseReader{Reader: resp.Body, readBytes: downloadedBytes}
 	_, err = io.Copy(file, readSource)
 	if err != nil {
 		log(err)

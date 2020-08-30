@@ -58,6 +58,7 @@ func (m *FileDownloader) downloadFiles(urlSlices []string, localPaths []string) 
 	}
 	// show progress
 	progress := make(chan float32)
+	defer close(progress)
 	m.ProgressChan = progress
 
 	downloadFilesCnt := len(urlSlices)
@@ -66,13 +67,12 @@ func (m *FileDownloader) downloadFiles(urlSlices []string, localPaths []string) 
 	ctx, timeoutFunc := context.WithTimeout(context.Background(), time.Minute*time.Duration(m.conf.DownloadTimeoutMinutes))
 	defer timeoutFunc()
 
-	var fileProgressAvailable bool = true
 	// if the url allows head access and returns Content-Length, we can calculate progress of downloading files.
 	for _, url := range urlSlices {
 		size, err := getFileSize(url)
 		if err != nil || size < 0 {
 			log(`Could not get whole size of the downloading file. No progress value is available`)
-			fileProgressAvailable = false
+			m.TotalFilesSize = 0
 			break
 		}
 		m.TotalFilesSize += size
@@ -87,12 +87,13 @@ func (m *FileDownloader) downloadFiles(urlSlices []string, localPaths []string) 
 	// Limit maximum download goroutines since network resource is not inifinite.
 	dlThreads := sync.NewCond(&sync.Mutex{})
 	currentThreadCnt := 0
+	var wg sync.WaitGroup
 	// Downlaoding Files
 	for i := 0; i < len(urlSlices); i++ {
 		url := urlSlices[i]
 		localPath := localPaths[i]
-
-		go downloadFile(ctx, dlThreads, url, localPath, downloadedBytes)
+		wg.Add(1)
+		go downloadFile(ctx, dlThreads, &wg, url, localPath, downloadedBytes)
 
 		currentThreadCnt++
 
@@ -105,27 +106,29 @@ func (m *FileDownloader) downloadFiles(urlSlices []string, localPaths []string) 
 		}
 	}
 
-	// Progress is unavailable
-	if !fileProgressAvailable {
-		close(progress)
-	}
+	// wait for all download ends.
+	wg.Wait()
 	// at last get the context error
 	m.err = ctx.Err()
 }
 
 func (m *FileDownloader) progressCalculator(ctx context.Context, downloadedBytes <-chan int, progress chan float32) {
 	var totaloDownloadedBytes int64
+LOOP:
 	for {
 		select {
 		case t := <-downloadedBytes:
 			totaloDownloadedBytes += int64(t)
+			log(totaloDownloadedBytes)
 			// send progress value to channel. progress should be between 0.0 to 1.0.
 			if m.TotalFilesSize > 0 {
 				progress <- float32(totaloDownloadedBytes / m.TotalFilesSize)
 			}
 		case <-ctx.Done():
 			log(`Progress Calculator Done.`)
-			break
+			break LOOP
+		default:
+			// noting to do
 		}
 	}
 }
