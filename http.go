@@ -2,7 +2,9 @@ package filedownloader
 
 import (
 	"context"
+	"io"
 	"net/http"
+	"os"
 )
 
 // file downloading methods using http libraries.
@@ -26,7 +28,38 @@ func getFileSize(url string) (int64, error) {
 }
 
 // Download Single File
-func downloadFile(ctx context.Context, url string, localFilePath string, progress <-chan float32) (int, error) {
+func downloadFile(ctx context.Context, url string, localFilePath string, downloadedBytes chan int) {
+	file, err := os.Create(localFilePath)
+	if err != nil {
+		log(err)
+		ctx = context.WithValue(ctx, downloadError, err)
+		return
+	}
+	defer file.Close()
 
-	return 0, nil
+	resp, err := http.Get(url)
+	readSource := &responseReader{Reader: resp.Body, readBytes: downloadedBytes}
+
+	_, err = io.Copy(file, readSource)
+	if err != nil {
+		log(err)
+		ctx = context.WithValue(ctx, downloadError, err)
+	}
+}
+
+// DownloadError is a string used for context value key.
+type DownloadError string
+
+var downloadError DownloadError = `downloadError`
+
+// responseReader http response reader with channels
+type responseReader struct {
+	io.Reader
+	readBytes chan int // send read bytes to channel
+}
+
+func (m *responseReader) Read(p []byte) (int, error) {
+	n, err := m.Reader.Read(p)
+	m.readBytes <- n
+	return n, err
 }
