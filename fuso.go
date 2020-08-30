@@ -12,9 +12,9 @@ import (
 // FileDownloader main structure
 type FileDownloader struct {
 	conf           *Config
-	mtx            sync.Mutex
 	TotalFilesSize int64
 	ProgressChan   <-chan float32 // 0.0 to 1.0 float value indicates progress of downloading
+	err            error          // error object
 }
 
 // Config filedownloader config
@@ -42,8 +42,8 @@ func (m *FileDownloader) SimpleFileDownload(url, localFilePath string) error {
 	var localPaths []string
 	localPaths = append(localPaths, localFilePath)
 	// very simple single file download
-	_, err := m.downloadFiles(urlSlice, localPaths)
-	return err
+	m.downloadFiles(urlSlice, localPaths)
+	return m.err
 }
 
 /**
@@ -51,9 +51,10 @@ func (m *FileDownloader) SimpleFileDownloadWithProgress((url, localFilePath stri
 
 }*/
 
-func (m *FileDownloader) downloadFiles(urlSlices []string, localPaths []string) (<-chan float32, error) {
+func (m *FileDownloader) downloadFiles(urlSlices []string, localPaths []string) {
 	if len(urlSlices) != len(localPaths) {
-		return nil, errors.New(`url count and local download file path must match`)
+		m.err = errors.New(`url count and local download file path must match`)
+		return
 	}
 	// show progress
 	progress := make(chan float32)
@@ -76,22 +77,40 @@ func (m *FileDownloader) downloadFiles(urlSlices []string, localPaths []string) 
 		}
 		m.TotalFilesSize += size
 	}
-
+	// count up downloaded bytes from download goroutines
 	var downloadedBytes = make(chan int)
+	defer close(downloadedBytes)
+
 	// observe progress
 	go m.progressCalculator(ctx, downloadedBytes, progress)
+
+	// Limit maximum download goroutines since network resource is not inifinite.
+	dlThreads := sync.NewCond(&sync.Mutex{})
+	currentThreadCnt := 0
 	// Downlaoding Files
 	for i := 0; i < len(urlSlices); i++ {
 		url := urlSlices[i]
 		localPath := localPaths[i]
-		go downloadFile(ctx, url, localPath, downloadedBytes)
+
+		go downloadFile(ctx, dlThreads, url, localPath, downloadedBytes)
+
+		currentThreadCnt++
+
+		// stop for loop when reached to max threads.
+		if m.conf.MaxDownloadThreads <= currentThreadCnt {
+			dlThreads.L.Lock()
+			dlThreads.Wait()
+			currentThreadCnt--
+			dlThreads.L.Unlock()
+		}
 	}
 
 	// Progress is unavailable
 	if !fileProgressAvailable {
 		close(progress)
 	}
-	return progress, nil
+	// at last get the context error
+	m.err = ctx.Err()
 }
 
 func (m *FileDownloader) progressCalculator(ctx context.Context, downloadedBytes <-chan int, progress chan float32) {

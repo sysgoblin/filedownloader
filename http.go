@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"sync"
 )
 
 // file downloading methods using http libraries.
@@ -28,7 +29,8 @@ func getFileSize(url string) (int64, error) {
 }
 
 // Download Single File
-func downloadFile(ctx context.Context, url string, localFilePath string, downloadedBytes chan int) {
+func downloadFile(ctx context.Context, c *sync.Cond, url string, localFilePath string, downloadedBytes chan int) {
+	defer c.Signal()
 	file, err := os.Create(localFilePath)
 	if err != nil {
 		log(err)
