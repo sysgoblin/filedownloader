@@ -46,10 +46,11 @@ func (m *FileDownloader) SimpleFileDownload(url, localFilePath string) error {
 	return m.err
 }
 
-/**
-func (m *FileDownloader) SimpleFileDownloadWithProgress((url, localFilePath string) (<-chan int, error) {
-
-}*/
+// MultipleFileDownload downloads multiple files at parallel in configured download threads.
+func (m *FileDownloader) MultipleFileDownload(urls, localFilePaths []string) error {
+	m.downloadFiles(urls, localFilePaths)
+	return m.err
+}
 
 func (m *FileDownloader) downloadFiles(urlSlices []string, localPaths []string) {
 	if len(urlSlices) != len(localPaths) {
@@ -100,6 +101,7 @@ func (m *FileDownloader) downloadFiles(urlSlices []string, localPaths []string) 
 		// stop for loop when reached to max threads.
 		if m.conf.MaxDownloadThreads <= currentThreadCnt {
 			dlThreads.L.Lock()
+			log(`Cond lock executed. download goroutine reached to maximum`)
 			dlThreads.Wait()
 			currentThreadCnt--
 			dlThreads.L.Unlock()
@@ -118,6 +120,7 @@ LOOP:
 	for {
 		select {
 		case t := <-downloadedBytes:
+			log(`Incomming bytes :` + strconv.Itoa(t))
 			totaloDownloadedBytes += int64(t)
 			log(totaloDownloadedBytes)
 			// send progress value to channel. progress should be between 0.0 to 1.0.

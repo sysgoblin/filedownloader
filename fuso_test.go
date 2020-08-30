@@ -1,17 +1,18 @@
 package filedownloader
 
 import (
+	"os/user"
+
 	"testing"
-	"time"
 )
 
 // filedownloader test
 
 func TestSimpleSingleDownload(t *testing.T) {
 	fdl := New(nil)
-	err := fdl.SimpleFileDownload(`https://golang.org/doc/install?download=go1.15.windows-amd64.msi`, `D:\\fuso.msi`)
+	user, _ := user.Current()
+	err := fdl.SimpleFileDownload(`https://golang.org/pkg/net/http/`, user.HomeDir+`/fuso.html`)
 	if err != nil {
 		t.Error(err)
 	}
-	time.Sleep(60 * time.Second)
 }
