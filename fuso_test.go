@@ -3,8 +3,8 @@ package filedownloader
 import (
 	"fmt"
 	"os/user"
-	"strconv"
-	"sync"
+	_ "strconv"
+	_ "sync"
 	"testing"
 )
 
@@ -29,7 +29,7 @@ func TestMultipleFilesDownload(t *testing.T) {
 	localPathSlices = append(localPathSlices, user.HomeDir+`/ugin.jpg`)
 	localPathSlices = append(localPathSlices, user.HomeDir+`/korvold.jpg`)
 	// Download Progress Observer
-	var wg sync.WaitGroup
+	/**var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -45,7 +45,7 @@ func TestMultipleFilesDownload(t *testing.T) {
 				t.Log(`No input`)
 			}
 		}
-	}()
+	}()*/
 
 	err := fdl.MultipleFileDownload(urlSlices, localPathSlices)
 	if err != nil {
@@ -53,7 +53,7 @@ func TestMultipleFilesDownload(t *testing.T) {
 	}
 
 	// wait for result
-	wg.Wait()
+	/** wg.Wait() */
 }
 
 func TestFloatProgressCalc(t *testing.T) {

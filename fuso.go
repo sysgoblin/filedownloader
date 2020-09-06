@@ -19,9 +19,10 @@ type FileDownloader struct {
 
 // Config filedownloader config
 type Config struct {
-	MaxDownloadThreads     int // limit of parallel downloading threads. Default value is 3
-	MaxRetry               int // retry count of file downloading, when download fails default is 0
-	DownloadTimeoutMinutes int // download timeout minutes, default is 60
+	MaxDownloadThreads     int  // limit of parallel downloading threads. Default value is 3
+	MaxRetry               int  // retry count of file downloading, when download fails default is 0
+	DownloadTimeoutMinutes int  // download timeout minutes, default is 60
+	RequiresProgress       bool // If true you can receive progress value from ProgressChan
 }
 
 // ErrDownload error component of downloader
@@ -30,7 +31,7 @@ var ErrDownload = errors.New(`File Download Error`)
 // New creates file downloader
 func New(config *Config) *FileDownloader {
 	if config == nil {
-		config = &Config{MaxDownloadThreads: 3, MaxRetry: 0, DownloadTimeoutMinutes: 60}
+		config = &Config{MaxDownloadThreads: 3, MaxRetry: 0, DownloadTimeoutMinutes: 60, RequiresProgress: false}
 	}
 	return &FileDownloader{conf: config}
 }
@@ -126,7 +127,7 @@ func (m *FileDownloader) progressCalculator(ctx context.Context, downloadedBytes
 				totaloDownloadedBytes += t
 				log(totaloDownloadedBytes)
 				// send progress value to channel. progress should be between 0.0 to 1.0.
-				if t > 0 {
+				if t > 0 && m.conf.RequiresProgress {
 					p := float64(totaloDownloadedBytes) / float64(m.TotalFilesSize)
 					log(`send progress ` + strconv.FormatFloat(p, 'f', 2, 64))
 					progress <- p
