@@ -13,8 +13,8 @@ import (
 type FileDownloader struct {
 	conf           *Config
 	TotalFilesSize int64
-	ProgressChan   <-chan float32 // 0.0 to 1.0 float value indicates progress of downloading
-	err            error          // error object
+	ProgressChan   chan float64 // 0.0 to 1.0 float value indicates progress of downloading
+	err            error        // error object
 }
 
 // Config filedownloader config
@@ -57,10 +57,6 @@ func (m *FileDownloader) downloadFiles(urlSlices []string, localPaths []string) 
 		m.err = errors.New(`url count and local download file path must match`)
 		return
 	}
-	// show progress
-	progress := make(chan float32)
-	defer close(progress)
-	m.ProgressChan = progress
 
 	downloadFilesCnt := len(urlSlices)
 	log(`Download Files: ` + strconv.Itoa(downloadFilesCnt))
@@ -83,7 +79,7 @@ func (m *FileDownloader) downloadFiles(urlSlices []string, localPaths []string) 
 	defer close(downloadedBytes)
 
 	// observe progress
-	go m.progressCalculator(ctx, downloadedBytes, progress)
+	m.progressCalculator(ctx, downloadedBytes)
 
 	// Limit maximum download goroutines since network resource is not inifinite.
 	dlThreads := sync.NewCond(&sync.Mutex{})
@@ -114,26 +110,36 @@ func (m *FileDownloader) downloadFiles(urlSlices []string, localPaths []string) 
 	m.err = ctx.Err()
 }
 
-func (m *FileDownloader) progressCalculator(ctx context.Context, downloadedBytes <-chan int, progress chan float32) {
-	var totaloDownloadedBytes int64
-LOOP:
-	for {
-		select {
-		case t := <-downloadedBytes:
-			log(`Incomming bytes :` + strconv.Itoa(t))
-			totaloDownloadedBytes += int64(t)
-			log(totaloDownloadedBytes)
-			// send progress value to channel. progress should be between 0.0 to 1.0.
-			if m.TotalFilesSize > 0 {
-				progress <- float32(totaloDownloadedBytes / m.TotalFilesSize)
+func (m *FileDownloader) progressCalculator(ctx context.Context, downloadedBytes <-chan int) {
+	var totaloDownloadedBytes int
+	log(`Total File Size on Internet::` + strconv.Itoa(int(m.TotalFilesSize)))
+	// show progress
+	progress := make(chan float64, 10)
+	m.ProgressChan = progress
+	go func() {
+		defer close(progress)
+	LOOP:
+		for {
+			select {
+			case t := <-downloadedBytes:
+				log(`Incomming bytes :` + strconv.Itoa(t))
+				totaloDownloadedBytes += t
+				log(totaloDownloadedBytes)
+				// send progress value to channel. progress should be between 0.0 to 1.0.
+				if t > 0 {
+					p := float64(totaloDownloadedBytes) / float64(m.TotalFilesSize)
+					log(`send progress ` + strconv.FormatFloat(p, 'f', 2, 64))
+					progress <- p
+				}
+			case <-ctx.Done():
+				log(`Progress Calculator Done.`)
+				break LOOP
+			default:
+				// noting to do
 			}
-		case <-ctx.Done():
-			log(`Progress Calculator Done.`)
-			break LOOP
-		default:
-			// noting to do
 		}
-	}
+		log(`Finish Calculator goroutine`)
+	}()
 }
 
 func log(param ...interface{}) {
