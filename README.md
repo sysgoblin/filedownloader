@@ -5,14 +5,13 @@
 - Easy to download files from internet
 - Download with its progress
 - Multiple Download with Multiple Thread
+- Able to configure Logging Function
 
 # FUSO
 Library project code is FUSO.
 File Util for Simple Object
 
 ![](resources/fuso.jpg)
-
-## This project is sill work in progress.
 
 # Import
 import github.com/chixm/filedownloader
@@ -47,3 +46,24 @@ import github.com/chixm/filedownloader
 	}
 
 ```
+
+## Self defined Log functions
+FUSO writes log by Golang "log" library by default.
+You can configure Config and set your own logger.
+
+```
+conf := Config{logfunc: myLogger}
+	fileDownloader := New(&conf)
+	// downloading to use home
+	user, _ := user.Current()
+	fileDownloader.SimpleFileDownload(`https://golang.org/pkg/net/http/`, user.HomeDir+`/fuso.html`)
+
+...
+
+func myLogger(params ...interface{}) {
+	log.Println(`log prefix`, params)
+}
+
+```
+
+

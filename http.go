@@ -14,9 +14,9 @@ import (
 func getHead(url string) (*http.Response, error) {
 	resp, err := http.Head(url)
 	if err != nil {
-		log(err)
+		return nil, err
 	}
-	return resp, err
+	return resp, nil
 }
 
 // get content-length from header
@@ -34,25 +34,29 @@ func downloadFile(ctx context.Context, c *sync.Cond, wg *sync.WaitGroup, url str
 	defer wg.Done()
 	file, err := os.Create(localFilePath)
 	if err != nil {
-		log(err)
 		ctx = context.WithValue(ctx, downloadError, err)
 		return
 	}
-	log(file.Name() + ` has created`)
 	defer file.Close()
-	log(`start downloading ` + url)
-	resp, err := http.Get(url)
-	if err != nil {
-		log(err)
-		return
-	}
-	defer resp.Body.Close()
 
-	readSource := &responseReader{Reader: resp.Body, readBytes: downloadedBytes}
-	_, err = io.Copy(file, readSource)
-	if err != nil {
-		log(err)
-		ctx = context.WithValue(ctx, downloadError, err)
+	select {
+	case <-ctx.Done():
+		// if context was done, finish downloading and quit.
+		return
+	default:
+		// download file
+		resp, err := http.Get(url)
+		if err != nil {
+			ctx = context.WithValue(ctx, downloadError, err)
+			return
+		}
+		defer resp.Body.Close()
+
+		readSource := &responseReader{Reader: resp.Body, readBytes: downloadedBytes}
+		_, err = io.Copy(file, readSource)
+		if err != nil {
+			ctx = context.WithValue(ctx, downloadError, err)
+		}
 	}
 }
 

@@ -2,6 +2,7 @@ package filedownloader
 
 import (
 	"fmt"
+	"log"
 	"os/user"
 	_ "strconv"
 	_ "sync"
@@ -59,4 +60,16 @@ func TestMultipleFilesDownload(t *testing.T) {
 func TestFloatProgressCalc(t *testing.T) {
 	v := float64(123 / float64(177476))
 	fmt.Println(v)
+}
+
+func TestExternalLogFunction(t *testing.T) {
+	conf := Config{logfunc: myLogger}
+	fileDownloader := New(&conf)
+	// downloading to use home
+	user, _ := user.Current()
+	fileDownloader.SimpleFileDownload(`https://golang.org/pkg/net/http/`, user.HomeDir+`/fuso.html`)
+}
+
+func myLogger(params ...interface{}) {
+	log.Println(`log prefix`, params)
 }

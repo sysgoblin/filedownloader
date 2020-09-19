@@ -13,16 +13,18 @@ import (
 type FileDownloader struct {
 	conf           *Config
 	TotalFilesSize int64
-	ProgressChan   chan float64 // 0.0 to 1.0 float value indicates progress of downloading
-	err            error        // error object
+	ProgressChan   chan float64               // 0.0 to 1.0 float value indicates progress of downloading
+	err            error                      // error object
+	logfunc        func(param ...interface{}) // logging function
 }
 
 // Config filedownloader config
 type Config struct {
-	MaxDownloadThreads     int  // limit of parallel downloading threads. Default value is 3
-	MaxRetry               int  // retry count of file downloading, when download fails default is 0
-	DownloadTimeoutMinutes int  // download timeout minutes, default is 60
-	RequiresProgress       bool // If true you can receive progress value from ProgressChan
+	MaxDownloadThreads     int                        // limit of parallel downloading threads. Default value is 3
+	MaxRetry               int                        // retry count of file downloading, when download fails default is 0
+	DownloadTimeoutMinutes int                        // download timeout minutes, default is 60
+	RequiresProgress       bool                       // If true you can receive progress value from ProgressChan
+	logfunc                func(param ...interface{}) // logging function
 }
 
 // ErrDownload error component of downloader
@@ -33,7 +35,15 @@ func New(config *Config) *FileDownloader {
 	if config == nil {
 		config = &Config{MaxDownloadThreads: 3, MaxRetry: 0, DownloadTimeoutMinutes: 60, RequiresProgress: false}
 	}
-	return &FileDownloader{conf: config}
+	instance := &FileDownloader{conf: config}
+	// set default logger if not configured log function is not set.
+	if config.logfunc == nil {
+		instance.logfunc = fdlLog
+	} else {
+		// external log function
+		instance.logfunc = config.logfunc
+	}
+	return instance
 }
 
 // SimpleFileDownload simply download url file to localPath
@@ -60,7 +70,7 @@ func (m *FileDownloader) downloadFiles(urlSlices []string, localPaths []string) 
 	}
 
 	downloadFilesCnt := len(urlSlices)
-	log(`Download Files: ` + strconv.Itoa(downloadFilesCnt))
+	m.logfunc(`Download Files: ` + strconv.Itoa(downloadFilesCnt))
 	// context for cancel and timeout
 	ctx, timeoutFunc := context.WithTimeout(context.Background(), time.Minute*time.Duration(m.conf.DownloadTimeoutMinutes))
 	defer timeoutFunc()
@@ -69,7 +79,7 @@ func (m *FileDownloader) downloadFiles(urlSlices []string, localPaths []string) 
 	for _, url := range urlSlices {
 		size, err := getFileSize(url)
 		if err != nil || size < 0 {
-			log(`Could not get whole size of the downloading file. No progress value is available`)
+			m.logfunc(`Could not get whole size of the downloading file. No progress value is available`)
 			m.TotalFilesSize = 0
 			break
 		}
@@ -98,7 +108,7 @@ func (m *FileDownloader) downloadFiles(urlSlices []string, localPaths []string) 
 		// stop for loop when reached to max threads.
 		if m.conf.MaxDownloadThreads <= currentThreadCnt {
 			dlThreads.L.Lock()
-			log(`Cond lock executed. download goroutine reached to maximum`)
+			m.logfunc(`Cond lock executed. download goroutine reached to maximum`)
 			dlThreads.Wait()
 			currentThreadCnt--
 			dlThreads.L.Unlock()
@@ -113,7 +123,7 @@ func (m *FileDownloader) downloadFiles(urlSlices []string, localPaths []string) 
 
 func (m *FileDownloader) progressCalculator(ctx context.Context, downloadedBytes <-chan int) {
 	var totaloDownloadedBytes int
-	log(`Total File Size on Internet::` + strconv.Itoa(int(m.TotalFilesSize)))
+	m.logfunc(`Total File Size on Internet::` + strconv.Itoa(int(m.TotalFilesSize)))
 	// show progress
 	progress := make(chan float64, 10)
 	m.ProgressChan = progress
@@ -123,26 +133,26 @@ func (m *FileDownloader) progressCalculator(ctx context.Context, downloadedBytes
 		for {
 			select {
 			case t := <-downloadedBytes:
-				log(`Incomming bytes :` + strconv.Itoa(t))
+				m.logfunc(`Incomming bytes :` + strconv.Itoa(t))
 				totaloDownloadedBytes += t
-				log(totaloDownloadedBytes)
+				m.logfunc(totaloDownloadedBytes)
 				// send progress value to channel. progress should be between 0.0 to 1.0.
 				if t > 0 && m.conf.RequiresProgress {
 					p := float64(totaloDownloadedBytes) / float64(m.TotalFilesSize)
-					log(`send progress ` + strconv.FormatFloat(p, 'f', 2, 64))
+					m.logfunc(`send progress ` + strconv.FormatFloat(p, 'f', 2, 64))
 					progress <- p
 				}
 			case <-ctx.Done():
-				log(`Progress Calculator Done.`)
+				m.logfunc(`Progress Calculator Done.`)
 				break LOOP
 			default:
 				// noting to do
 			}
 		}
-		log(`Finish Calculator goroutine`)
+		m.logfunc(`Finish Calculator goroutine`)
 	}()
 }
 
-func log(param ...interface{}) {
+func fdlLog(param ...interface{}) {
 	logger.Println(param...)
 }
