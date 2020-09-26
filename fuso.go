@@ -3,6 +3,7 @@ package filedownloader
 import (
 	"context"
 	"errors"
+	"fmt"
 	logger "log"
 	"strconv"
 	"sync"
@@ -15,6 +16,7 @@ type FileDownloader struct {
 	TotalFilesSize int64
 	ProgressChan   chan float64               // 0.0 to 1.0 float value indicates progress of downloading
 	err            error                      // error object
+	Cancel         func()                     // cancel downloading, if this method is called.
 	logfunc        func(param ...interface{}) // logging function
 }
 
@@ -34,6 +36,9 @@ var ErrDownload = errors.New(`File Download Error`)
 func New(config *Config) *FileDownloader {
 	if config == nil {
 		config = &Config{MaxDownloadThreads: 3, MaxRetry: 0, DownloadTimeoutMinutes: 60, RequiresProgress: false}
+	}
+	if config.MaxDownloadThreads == 0 {
+		panic(`Check Configuration again. You can't download file if MaxDownloadThreads is 0`)
 	}
 	instance := &FileDownloader{conf: config}
 	// set default logger if not configured log function is not set.
@@ -74,7 +79,9 @@ func (m *FileDownloader) downloadFiles(urlSlices []string, localPaths []string) 
 	// context for cancel and timeout
 	ctx, timeoutFunc := context.WithTimeout(context.Background(), time.Minute*time.Duration(m.conf.DownloadTimeoutMinutes))
 	defer timeoutFunc()
-
+	ctx, cancelFUnc := context.WithCancel(ctx)
+	defer cancelFUnc()
+	m.Cancel = cancelFUnc
 	// if the url allows head access and returns Content-Length, we can calculate progress of downloading files.
 	for _, url := range urlSlices {
 		size, err := getFileSize(url)
@@ -88,10 +95,10 @@ func (m *FileDownloader) downloadFiles(urlSlices []string, localPaths []string) 
 	// count up downloaded bytes from download goroutines
 	var downloadedBytes = make(chan int)
 	defer close(downloadedBytes)
-
+	m.logfunc(`Progress Calculator Started`)
 	// observe progress
 	m.progressCalculator(ctx, downloadedBytes)
-
+	m.logfunc(fmt.Sprintf("Total Download Bytes:: %d", m.TotalFilesSize))
 	// Limit maximum download goroutines since network resource is not inifinite.
 	dlThreads := sync.NewCond(&sync.Mutex{})
 	currentThreadCnt := 0
@@ -101,29 +108,32 @@ func (m *FileDownloader) downloadFiles(urlSlices []string, localPaths []string) 
 		url := urlSlices[i]
 		localPath := localPaths[i]
 		wg.Add(1)
-		go downloadFile(ctx, dlThreads, &wg, url, localPath, downloadedBytes)
+		ctxdl := context.WithValue(ctx, url, url)
+		go downloadFile(ctxdl, dlThreads, &wg, url, localPath, downloadedBytes, m.logfunc)
 
 		currentThreadCnt++
 
 		// stop for loop when reached to max threads.
-		if m.conf.MaxDownloadThreads <= currentThreadCnt {
-			dlThreads.L.Lock()
-			m.logfunc(`Cond lock executed. download goroutine reached to maximum`)
+		dlThreads.L.Lock()
+		if m.conf.MaxDownloadThreads < currentThreadCnt {
+			m.logfunc(`Cond lock executed. download goroutine reached to max`)
 			dlThreads.Wait()
+			m.logfunc(`Cond wait released. goes to next file download if more.`)
 			currentThreadCnt--
-			dlThreads.L.Unlock()
 		}
+		dlThreads.L.Unlock()
 	}
-
+	m.logfunc(`Wait group is waiting for download.`)
 	// wait for all download ends.
 	wg.Wait()
 	// at last get the context error
 	m.err = ctx.Err()
+	m.logfunc(`Download File Done.`)
 }
 
 func (m *FileDownloader) progressCalculator(ctx context.Context, downloadedBytes <-chan int) {
 	var totaloDownloadedBytes int
-	m.logfunc(`Total File Size on Internet::` + strconv.Itoa(int(m.TotalFilesSize)))
+	m.logfunc(`Total File Size from HTTP head Info::` + strconv.Itoa(int(m.TotalFilesSize)))
 	// show progress
 	progress := make(chan float64, 10)
 	m.ProgressChan = progress
