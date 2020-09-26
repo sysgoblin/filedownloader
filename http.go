@@ -5,7 +5,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"sync"
 )
 
 // file downloading methods using http libraries.
@@ -29,10 +28,7 @@ func getFileSize(url string) (int64, error) {
 }
 
 // Download Single File
-func downloadFile(ctx context.Context, c *sync.Cond, wg *sync.WaitGroup, url string, localFilePath string, downloadedBytes chan int, log func(param ...interface{})) {
-	defer c.Signal()
-	defer wg.Done()
-
+func downloadFile(ctx context.Context, url string, localFilePath string, downloadedBytes chan int, log func(param ...interface{})) {
 	select {
 	case <-ctx.Done():
 		log(`Download Cancelled by context`)
@@ -51,8 +47,7 @@ func downloadFile(ctx context.Context, c *sync.Cond, wg *sync.WaitGroup, url str
 		}
 		defer resp.Body.Close()
 		readSource := &responseReader{Reader: resp.Body, readBytes: downloadedBytes}
-		ctxcp := context.WithValue(ctx, file, nil)
-		_, err = copyBuffer(ctxcp, file, readSource, nil)
+		_, err = copyBuffer(ctx, file, readSource, nil)
 		if err != nil {
 			if err == ErrCancelCopy {
 				ctx = context.WithValue(ctx, cancelError, err)

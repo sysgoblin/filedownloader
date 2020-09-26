@@ -79,9 +79,6 @@ func (m *FileDownloader) downloadFiles(urlSlices []string, localPaths []string) 
 	// context for cancel and timeout
 	ctx, timeoutFunc := context.WithTimeout(context.Background(), time.Minute*time.Duration(m.conf.DownloadTimeoutMinutes))
 	defer timeoutFunc()
-	ctx, cancelFUnc := context.WithCancel(ctx)
-	defer cancelFUnc()
-	m.Cancel = cancelFUnc
 	// if the url allows head access and returns Content-Length, we can calculate progress of downloading files.
 	for _, url := range urlSlices {
 		size, err := getFileSize(url)
@@ -100,35 +97,42 @@ func (m *FileDownloader) downloadFiles(urlSlices []string, localPaths []string) 
 	m.progressCalculator(ctx, downloadedBytes)
 	m.logfunc(fmt.Sprintf("Total Download Bytes:: %d", m.TotalFilesSize))
 	// Limit maximum download goroutines since network resource is not inifinite.
-	dlThreads := sync.NewCond(&sync.Mutex{})
+	dlCond := sync.NewCond(&sync.Mutex{})
 	currentThreadCnt := 0
 	var wg sync.WaitGroup
+	// download context
+	ctx2, timeoutFunc := context.WithTimeout(ctx, time.Minute*time.Duration(m.conf.DownloadTimeoutMinutes))
+	defer timeoutFunc()
+	ctx3, cancelFunc := context.WithCancel(ctx2)
+	defer cancelFunc()
+	m.Cancel = cancelFunc
 	// Downlaoding Files
 	for i := 0; i < len(urlSlices); i++ {
 		url := urlSlices[i]
 		localPath := localPaths[i]
 		wg.Add(1)
-		ctxdl := context.WithValue(ctx, url, url)
-		go downloadFile(ctxdl, dlThreads, &wg, url, localPath, downloadedBytes, m.logfunc)
-
+		go func() {
+			defer wg.Done()
+			defer dlCond.Signal()
+			downloadFile(ctx3, url, localPath, downloadedBytes, m.logfunc)
+		}()
 		currentThreadCnt++
-
 		// stop for loop when reached to max threads.
-		dlThreads.L.Lock()
+		dlCond.L.Lock()
 		if m.conf.MaxDownloadThreads < currentThreadCnt {
-			m.logfunc(`Cond lock executed. download goroutine reached to max`)
-			dlThreads.Wait()
-			m.logfunc(`Cond wait released. goes to next file download if more.`)
+			m.logfunc(`Cond locked. download goroutine reached to max`)
+			dlCond.Wait()
+			m.logfunc(`Cond released. goes to next file download if more.`)
 			currentThreadCnt--
 		}
-		dlThreads.L.Unlock()
+		dlCond.L.Unlock()
 	}
 	m.logfunc(`Wait group is waiting for download.`)
 	// wait for all download ends.
 	wg.Wait()
 	// at last get the context error
 	m.err = ctx.Err()
-	m.logfunc(`Download File Done.`)
+	m.logfunc(`All Download Task Done.`)
 }
 
 func (m *FileDownloader) progressCalculator(ctx context.Context, downloadedBytes <-chan int) {
@@ -153,7 +157,7 @@ func (m *FileDownloader) progressCalculator(ctx context.Context, downloadedBytes
 					progress <- p
 				}
 			case <-ctx.Done():
-				m.logfunc(`Progress Calculator Done.`)
+				//m.logfunc(`Progress Calculator Done.`)
 				break LOOP
 			default:
 				// noting to do
