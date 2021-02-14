@@ -93,6 +93,44 @@ func TestCancelWhileDownloading(t *testing.T) {
 	t.Log(`Test Done`)
 }
 
+func TestFileDownloadWithDetailedConfiguration(t *testing.T) {
+	// default setting of RequiresDetailProgress is false, you need to set it true if you need download progress.
+	conf := Config{logfunc: myLogger, MaxDownloadThreads: 1, DownloadTimeoutMinutes: 3, MaxRetry: 3, RequiresDetailProgress: true}
+	fileDownloader := New(&conf)
+
+	done := make(chan int)
+	// if you set RequiresDetailProgress = true, you can receive progress from channel
+	go func() {
+	LOOP:
+		for {
+			select {
+			case speed := <-fileDownloader.DownloadBytesPerSecond:
+				// DownloadBytesPerSecond Channel can receive how fast the download is running.
+				log.Println(fmt.Sprintf(`%d bytes/sec`, speed))
+			case progress := <-fileDownloader.ProgressChan:
+				// Progress Channel (ProgressChan) receives how much download has progressed.
+				log.Println(fmt.Sprintf(`%f percent has done`, progress)) // ex. 10.5 percent has done
+			case <-done:
+				break LOOP // escape from forever loop
+			}
+		}
+	}()
+
+	// downloading file to use home directory
+	user, _ := user.Current()
+	// test download file 512MB
+	err := fileDownloader.SimpleFileDownload(`http://ipv4.download.thinkbroadband.com/512MB.zip`, user.HomeDir+`/512.zip`)
+	if err != nil {
+		t.Error(err)
+		done <- 1
+	}
+	if fileDownloader.err != nil {
+		t.Error(fileDownloader.err)
+	}
+	done <- 0
+	t.Log(`Test Done`)
+}
+
 func TestMultiFileDownloadCancelWhileDownloading(t *testing.T) {
 	conf := Config{logfunc: myLogger, MaxDownloadThreads: 1, DownloadTimeoutMinutes: 3, MaxRetry: 3}
 	fileDownloader := New(&conf)
@@ -118,5 +156,5 @@ func TestMultiFileDownloadCancelWhileDownloading(t *testing.T) {
 }
 
 func myLogger(params ...interface{}) {
-	log.Println(`debug ::`, params)
+	//log.Println(`debug ::`, params)
 }
