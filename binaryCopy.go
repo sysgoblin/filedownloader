@@ -12,10 +12,11 @@ import (
 // ErrCancelCopy Error occur by cancel
 var ErrCancelCopy = errors.New(`Cancelled by context`)
 
+var copyBufferSize = 32 * 1024
+
 func copyBuffer(ctx context.Context, dst io.Writer, src io.Reader, buf []byte) (written int64, err error) {
 	if buf == nil { //default buffer size
-		size := 32 * 1024
-		buf = make([]byte, size)
+		buf = make([]byte, copyBufferSize)
 	}
 loop:
 	for {

@@ -4,10 +4,11 @@ import (
 	"context"
 	"io"
 	"net/http"
-	"os"
 )
 
 // file downloading methods using http libraries.
+
+const acceptRangeHeader = "Accept-Ranges"
 
 // getting url's head information, mostly for getting file size from Content-Length.
 func getHead(url string) (*http.Response, error) {
@@ -19,28 +20,41 @@ func getHead(url string) (*http.Response, error) {
 }
 
 // get content-length from header
-func getFileSize(url string) (int64, error) {
+func getFileSizeAndResumable(url string) (int64, bool, error) {
 	resp, err := getHead(url)
 	if err != nil {
-		return 0, err
+		return 0, false, err
 	}
-	return resp.ContentLength, nil
+	var acceptResume bool
+	if resp.Header.Get(acceptRangeHeader) == "" {
+		acceptResume = false
+	} else {
+		acceptResume = true
+	}
+	return resp.ContentLength, acceptResume, nil
 }
 
 // Download Single File
-func downloadFile(ctx context.Context, url string, localFilePath string, downloadedBytes chan int, log func(param ...interface{})) {
+func downloadFile(ctx context.Context, url string, localFilePath string, downloadedBytes chan int, useResume bool, filesize int64, log func(param ...interface{})) {
 	select {
 	case <-ctx.Done():
 		log(`Download Cancelled by context`)
 		return
 	default:
-		file, err := os.Create(localFilePath)
+		file, cBytes, err := setupDownloadFile(localFilePath, useResume)
 		if err != nil {
 			return
 		}
 		defer file.Close()
+		r, err := http.NewRequestWithContext(ctx, `GET`, url, nil)
+		if useResume {
+			r.Header.Add(`Range`, rangeHeaderValue(file, cBytes, filesize))
+		}
+		if err != nil {
+			return
+		}
 		// download file
-		resp, err := http.Get(url)
+		resp, err := http.DefaultClient.Do(r)
 		if err != nil {
 			ctx = context.WithValue(ctx, downloadError, err)
 			return

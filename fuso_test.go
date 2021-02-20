@@ -158,3 +158,15 @@ func TestMultiFileDownloadCancelWhileDownloading(t *testing.T) {
 func myLogger(params ...interface{}) {
 	//log.Println(`debug ::`, params)
 }
+
+func TestFileExists(t *testing.T) {
+	user, _ := user.Current()
+	exists, bytes, err := isFileExists(user.HomeDir + `/512.zip`)
+	if err != nil {
+		t.Log(err)
+		return
+	}
+	if exists {
+		log.Println(bytes)
+	}
+}

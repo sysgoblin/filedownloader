@@ -88,19 +88,21 @@ func (m *FileDownloader) downloadFiles(urlSlices []string, localPaths []string) 
 	ctx, timeoutFunc := context.WithTimeout(context.Background(), time.Minute*time.Duration(m.conf.DownloadTimeoutMinutes))
 	defer timeoutFunc()
 	// if the url allows head access and returns Content-Length, we can calculate progress of downloading files.
+	var resumableUrls = make(map[string]*resumeInfo)
 	for _, url := range urlSlices {
-		size, err := getFileSize(url)
+		size, resumable, err := getFileSizeAndResumable(url)
 		if err != nil || size < 0 {
-			m.logfunc(`Could not get whole size of the downloading file. No progress value is available`)
-			m.TotalFilesSize = 0
-			break
+			panic(`Could not get whole size of the downloading file. No progress value is available`)
 		}
 		m.TotalFilesSize += size
+		resumableUrls[url] = &resumeInfo{isResumable: resumable, contentLength: size}
 	}
 	// count up downloaded bytes from download goroutines
 	var downloadedBytes = make(chan int)
 	defer close(downloadedBytes)
+
 	m.logfunc(`Progress Calculator Started`)
+
 	// observe progress
 	m.progressObserver(ctx, downloadedBytes)
 	m.logfunc(fmt.Sprintf("Total Download Bytes:: %d", m.TotalFilesSize))
@@ -118,11 +120,13 @@ func (m *FileDownloader) downloadFiles(urlSlices []string, localPaths []string) 
 	for i := 0; i < len(urlSlices); i++ {
 		url := urlSlices[i]
 		localPath := localPaths[i]
+		resume, ok := resumableUrls[url]
+		useResume := resume.isResumable && ok
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			defer dlCond.Signal()
-			downloadFile(ctx3, url, localPath, downloadedBytes, m.logfunc)
+			downloadFile(ctx3, url, localPath, downloadedBytes, useResume, resume.contentLength, m.logfunc)
 		}()
 		currentThreadCnt++
 		// stop for loop when reached to max threads.
@@ -182,4 +186,9 @@ func (m *FileDownloader) progressObserver(ctx context.Context, downloadedBytes <
 
 func fdlLog(param ...interface{}) {
 	logger.Println(param...)
+}
+
+type resumeInfo struct {
+	isResumable   bool
+	contentLength int64
 }
