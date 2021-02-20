@@ -41,14 +41,15 @@ func downloadFile(ctx context.Context, url string, localFilePath string, downloa
 		log(`Download Cancelled by context`)
 		return
 	default:
-		file, cBytes, err := setupDownloadFile(localFilePath, useResume)
+		file, offset, err := setupDownloadFile(localFilePath, useResume)
 		if err != nil {
 			return
 		}
 		defer file.Close()
 		r, err := http.NewRequestWithContext(ctx, `GET`, url, nil)
 		if useResume {
-			r.Header.Add(`Range`, rangeHeaderValue(file, cBytes, filesize))
+			r.Header.Add(`Range`, rangeHeaderValue(file, offset, filesize))
+			log(`Resume enabled, added download header::`, r.Header)
 		}
 		if err != nil {
 			return

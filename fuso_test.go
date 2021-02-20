@@ -109,11 +109,12 @@ func TestFileDownloadWithDetailedConfiguration(t *testing.T) {
 				log.Println(fmt.Sprintf(`%d bytes/sec`, speed))
 			case progress := <-fileDownloader.ProgressChan:
 				// Progress Channel (ProgressChan) receives how much download has progressed.
-				log.Println(fmt.Sprintf(`%f percent has done`, progress)) // ex. 10.5 percent has done
+				log.Println(fmt.Sprintf(`%f percent has done`, progress*100)) // ex. 10.5 percent has done
 			case <-done:
 				break LOOP // escape from forever loop
 			}
 		}
+		log.Println(`end of Observe loop`)
 	}()
 
 	// downloading file to use home directory
@@ -161,12 +162,10 @@ func myLogger(params ...interface{}) {
 
 func TestFileExists(t *testing.T) {
 	user, _ := user.Current()
-	exists, bytes, err := isFileExists(user.HomeDir + `/512.zip`)
+	bytes, err := getFileStartOffset(user.HomeDir + `/512.zip`)
 	if err != nil {
 		t.Log(err)
 		return
 	}
-	if exists {
-		log.Println(bytes)
-	}
+	t.Log(bytes)
 }

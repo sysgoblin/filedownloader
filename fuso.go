@@ -81,7 +81,6 @@ func (m *FileDownloader) downloadFiles(urlSlices []string, localPaths []string) 
 		m.err = errors.New(`url count and local download file path must match`)
 		return
 	}
-
 	downloadFilesCnt := len(urlSlices)
 	m.logfunc(`Download Files: ` + strconv.Itoa(downloadFilesCnt))
 	// context for cancel and timeout

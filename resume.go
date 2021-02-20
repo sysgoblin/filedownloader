@@ -8,16 +8,16 @@ import (
 
 // helper functions to resume file.
 
-// check file exists and its filesize
-func isFileExists(localfilePath string) (bool, int64, error) {
+// check start point of resume file
+func getFileStartOffset(localfilePath string) (int64, error) {
 	f, err := os.Stat(localfilePath)
 	if err != nil {
-		return os.IsExist(err), 0, err
+		return 0, err
 	}
 	if f.IsDir() {
-		return false, 0, errors.New(localfilePath + ` is directory. Not a file`)
+		return 0, errors.New(localfilePath + ` is directory. Not a file`)
 	}
-	return true, f.Size(), nil
+	return f.Size(), nil
 }
 
 // small files should not use resume
@@ -42,18 +42,17 @@ func rangeHeaderValue(file *os.File, currentLocalFileSize int64, contentLength i
 
 // find download target file and its size to know the progress of download
 func setupDownloadFile(localPath string, useResume bool) (*os.File, int64, error) {
-	exists, bytes, err := isFileExists(localPath)
+	offset, err := getFileStartOffset(localPath)
+	var file *os.File
+	if err != nil && os.IsNotExist(err) {
+		file, err = os.Create(localPath)
+		return file, 0, err
+	}
+	// use file that already exists
+	file, err = os.OpenFile(localPath, os.O_RDWR, os.ModeExclusive)
 	if err != nil {
+		// can't open file for some reason
 		return nil, 0, err
 	}
-	var file *os.File
-	if exists == false {
-		file, err = os.Create(localPath)
-		if err != nil {
-			return nil, 0, err
-		}
-	} else {
-		file, err = os.OpenFile(localPath, os.O_RDWR|os.O_CREATE, os.ModeExclusive)
-	}
-	return file, bytes, nil
+	return file, offset, nil
 }
