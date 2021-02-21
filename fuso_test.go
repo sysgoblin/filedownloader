@@ -24,38 +24,14 @@ func TestSimpleSingleDownload(t *testing.T) {
 func TestMultipleFilesDownload(t *testing.T) {
 	fdl := New(nil)
 	user, _ := user.Current()
-	var urlSlices []string
-	urlSlices = append(urlSlices, `https://files.hareruyamtg.com/img/goods/L/M21/EN/0001.jpg`)
-	urlSlices = append(urlSlices, `https://files.hareruyamtg.com/img/goods/L/ELD/EN/BRAWL0329.jpg`)
-	var localPathSlices []string
-	localPathSlices = append(localPathSlices, user.HomeDir+`/ugin.jpg`)
-	localPathSlices = append(localPathSlices, user.HomeDir+`/korvold.jpg`)
 	// Download Progress Observer
-	/**var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-	LOOP:
-		for {
-			select {
-			case bytes, ok := <-fdl.ProgressChan:
-				fmt.Println(`progress comming.` + strconv.FormatFloat(bytes, 'f', 2, 64))
-				if ok == false {
-					break LOOP
-				}
-			default:
-				t.Log(`No input`)
-			}
-		}
-	}()*/
-
-	err := fdl.MultipleFileDownload(urlSlices, localPathSlices)
+	var downloadFiles []*Download
+	downloadFiles = append(downloadFiles, &Download{URL: `https://files.hareruyamtg.com/img/goods/L/M21/EN/0001.jpg`, LocalFilePath: user.HomeDir + `/ugin.jpg`})
+	downloadFiles = append(downloadFiles, &Download{URL: `https://files.hareruyamtg.com/img/goods/L/ELD/EN/BRAWL0329.jpg`, LocalFilePath: user.HomeDir + `/korvold.jpg`})
+	err := fdl.MultipleFileDownload(downloadFiles)
 	if err != nil {
 		t.Error(err)
 	}
-
-	// wait for result
-	/** wg.Wait() */
 }
 
 func TestFloatProgressCalc(t *testing.T) {
@@ -109,11 +85,12 @@ func TestFileDownloadWithDetailedConfiguration(t *testing.T) {
 				log.Println(fmt.Sprintf(`%d bytes/sec`, speed))
 			case progress := <-fileDownloader.ProgressChan:
 				// Progress Channel (ProgressChan) receives how much download has progressed.
-				log.Println(fmt.Sprintf(`%f percent has done`, progress)) // ex. 10.5 percent has done
+				log.Println(fmt.Sprintf(`%f percent has done`, progress*100)) // ex. 10.5 percent has done
 			case <-done:
 				break LOOP // escape from forever loop
 			}
 		}
+		log.Println(`end of Observe loop`)
 	}()
 
 	// downloading file to use home directory
@@ -142,10 +119,11 @@ func TestMultiFileDownloadCancelWhileDownloading(t *testing.T) {
 		// wait and cancel
 		fileDownloader.Cancel()
 	}()
-	var urlSlices = []string{"http://ipv4.download.thinkbroadband.com/512MB.zip", "http://ipv4.download.thinkbroadband.com/200MB.zip"}
-	var fileSlices = []string{user.HomeDir + `/512.zip`, user.HomeDir + `/200.zip`}
+	var downloadFiles []*Download
+	downloadFiles = append(downloadFiles, &Download{URL: "http://ipv4.download.thinkbroadband.com/512MB.zip", LocalFilePath: user.HomeDir + `/512.zip`})
+	downloadFiles = append(downloadFiles, &Download{URL: "http://ipv4.download.thinkbroadband.com/200MB.zip", LocalFilePath: user.HomeDir + `/200.zip`})
 	// test download file 512MB
-	err := fileDownloader.MultipleFileDownload(urlSlices, fileSlices)
+	err := fileDownloader.MultipleFileDownload(downloadFiles)
 	if err != nil {
 		t.Error(err)
 	}
@@ -157,4 +135,14 @@ func TestMultiFileDownloadCancelWhileDownloading(t *testing.T) {
 
 func myLogger(params ...interface{}) {
 	//log.Println(`debug ::`, params)
+}
+
+func TestFileExists(t *testing.T) {
+	user, _ := user.Current()
+	bytes, err := getFileStartOffset(user.HomeDir + `/512.zip`)
+	if err != nil {
+		t.Log(err)
+		return
+	}
+	t.Log(bytes)
 }
