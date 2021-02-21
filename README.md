@@ -29,23 +29,18 @@ import github.com/chixm/filedownloader
 ```
 
 ## Example2: Multiple Files Download From Internet
+Simply, put Url and local file path to Download structure slice and call MultipleFileDownload
 ```
-	fdl := filedownloader.New(nil)
+	fdl := New(nil)
 	user, _ := user.Current()
-	// make a URL slice of downloading files
-	var urlSlices []string
-	urlSlices = append(urlSlices, `https://files.hareruyamtg.com/img/goods/L/M21/EN/0001.jpg`)
-	urlSlices = append(urlSlices, `https://files.hareruyamtg.com/img/goods/L/ELD/EN/BRAWL0329.jpg`)
-	// make a slice of LocalFile download paths.
-	var localPathSlices []string
-	localPathSlices = append(localPathSlices, user.HomeDir+`/ugin.jpg`)
-	localPathSlices = append(localPathSlices, user.HomeDir+`/korvold.jpg`)
-
-	err := fdl.MultipleFileDownload(urlSlices, localPathSlices)
+	// Download Progress Observer
+	var downloadFiles []*Download
+	downloadFiles = append(downloadFiles, &Download{URL: `https://files.hareruyamtg.com/img/goods/L/M21/EN/0001.jpg`, LocalFilePath: user.HomeDir + `/ugin.jpg`})
+	downloadFiles = append(downloadFiles, &Download{URL: `https://files.hareruyamtg.com/img/goods/L/ELD/EN/BRAWL0329.jpg`, LocalFilePath: user.HomeDir + `/korvold.jpg`})
+	err := fdl.MultipleFileDownload(downloadFiles)
 	if err != nil {
 		t.Error(err)
 	}
-
 ```
 
 ## Self defined Log functions

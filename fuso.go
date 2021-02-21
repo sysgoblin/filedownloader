@@ -30,6 +30,12 @@ type Config struct {
 	logfunc                func(param ...interface{}) // logging function
 }
 
+// Download target url to download and local path to be downloaded
+type Download struct {
+	URL           string // downloading file URL
+	LocalFilePath string // local file path which URL file will be downloaded
+}
+
 // ErrDownload error component of downloader
 var ErrDownload = errors.New(`File Download Error`)
 
@@ -61,40 +67,35 @@ func New(config *Config) *FileDownloader {
 
 // SimpleFileDownload simply download url file to localPath
 func (m *FileDownloader) SimpleFileDownload(url, localFilePath string) error {
-	var urlSlice []string
-	urlSlice = append(urlSlice, url)
-	var localPaths []string
-	localPaths = append(localPaths, localFilePath)
+	d := Download{URL: url, LocalFilePath: localFilePath}
+	var list []*Download
+	list = append(list, &d)
 	// very simple single file download
-	m.downloadFiles(urlSlice, localPaths)
+	m.downloadFiles(list)
 	return m.err
 }
 
 // MultipleFileDownload downloads multiple files at parallel in configured download threads.
-func (m *FileDownloader) MultipleFileDownload(urls, localFilePaths []string) error {
-	m.downloadFiles(urls, localFilePaths)
+func (m *FileDownloader) MultipleFileDownload(downloads []*Download) error {
+	m.downloadFiles(downloads)
 	return m.err
 }
 
-func (m *FileDownloader) downloadFiles(urlSlices []string, localPaths []string) {
-	if len(urlSlices) != len(localPaths) {
-		m.err = errors.New(`url count and local download file path must match`)
-		return
-	}
-	downloadFilesCnt := len(urlSlices)
+func (m *FileDownloader) downloadFiles(downloads []*Download) {
+	downloadFilesCnt := len(downloads)
 	m.logfunc(`Download Files: ` + strconv.Itoa(downloadFilesCnt))
 	// context for cancel and timeout
 	ctx, timeoutFunc := context.WithTimeout(context.Background(), time.Minute*time.Duration(m.conf.DownloadTimeoutMinutes))
 	defer timeoutFunc()
 	// if the url allows head access and returns Content-Length, we can calculate progress of downloading files.
 	var resumableUrls = make(map[string]*resumeInfo)
-	for _, url := range urlSlices {
-		size, resumable, err := getFileSizeAndResumable(url)
+	for _, d := range downloads {
+		size, resumable, err := getFileSizeAndResumable(d.URL)
 		if err != nil || size < 0 {
 			panic(`Could not get whole size of the downloading file. No progress value is available`)
 		}
 		m.TotalFilesSize += size
-		resumableUrls[url] = &resumeInfo{isResumable: resumable, contentLength: size}
+		resumableUrls[d.URL] = &resumeInfo{isResumable: resumable, contentLength: size}
 	}
 	// count up downloaded bytes from download goroutines
 	var downloadedBytes = make(chan int)
@@ -116,9 +117,9 @@ func (m *FileDownloader) downloadFiles(urlSlices []string, localPaths []string) 
 	defer cancelFunc()
 	m.Cancel = cancelFunc
 	// Downlaoding Files
-	for i := 0; i < len(urlSlices); i++ {
-		url := urlSlices[i]
-		localPath := localPaths[i]
+	for i := 0; i < downloadFilesCnt; i++ {
+		url := downloads[i].URL
+		localPath := downloads[i].LocalFilePath
 		resume, ok := resumableUrls[url]
 		useResume := resume.isResumable && ok
 		wg.Add(1)
