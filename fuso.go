@@ -19,6 +19,7 @@ type FileDownloader struct {
 	err                    error                      // error object
 	Cancel                 func()                     // cancel downloading, if this method is called.
 	logfunc                func(param ...interface{}) // logging function
+	State                  state                      // downloading state of filedownloader
 }
 
 // Config filedownloader config
@@ -38,6 +39,19 @@ type Download struct {
 
 // ErrDownload error component of downloader
 var ErrDownload = errors.New(`File Download Error`)
+
+type state string
+
+// current state of filedownloader instance
+
+// StateReady is first state of instance
+const StateReady state = `ready`
+
+// StateDownloading is when the download started
+const StateDownloading state = `downloading`
+
+// StateDone is when the download has finished or cancelled
+const StateDone state = `done`
 
 // New creates file downloader
 func New(config *Config) *FileDownloader {
@@ -62,11 +76,16 @@ func New(config *Config) *FileDownloader {
 		instance.ProgressChan = progress
 		instance.DownloadBytesPerSecond = speed
 	}
+	instance.State = StateReady
 	return instance
 }
 
 // SimpleFileDownload simply download url file to localPath
 func (m *FileDownloader) SimpleFileDownload(url, localFilePath string) error {
+	if m.State != StateReady {
+		panic(`filedownloader has already started or done`)
+	}
+	m.State = StateDownloading
 	d := Download{URL: url, LocalFilePath: localFilePath}
 	var list []*Download
 	list = append(list, &d)
@@ -77,11 +96,18 @@ func (m *FileDownloader) SimpleFileDownload(url, localFilePath string) error {
 
 // MultipleFileDownload downloads multiple files at parallel in configured download threads.
 func (m *FileDownloader) MultipleFileDownload(downloads []*Download) error {
+	if m.State != StateReady {
+		panic(`filedownloader has already started or done`)
+	}
+	m.State = StateDownloading
 	m.downloadFiles(downloads)
 	return m.err
 }
 
 func (m *FileDownloader) downloadFiles(downloads []*Download) {
+	defer func() {
+		m.State = StateDone
+	}()
 	downloadFilesCnt := len(downloads)
 	m.logfunc(`Download Files: ` + strconv.Itoa(downloadFilesCnt))
 	// context for cancel and timeout
@@ -100,9 +126,6 @@ func (m *FileDownloader) downloadFiles(downloads []*Download) {
 	// count up downloaded bytes from download goroutines
 	var downloadedBytes = make(chan int)
 	defer close(downloadedBytes)
-
-	m.logfunc(`Progress Calculator Started`)
-
 	// observe progress
 	m.progressObserver(ctx, downloadedBytes)
 	m.logfunc(fmt.Sprintf("Total Download Bytes:: %d", m.TotalFilesSize))
