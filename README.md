@@ -13,7 +13,7 @@ Library project code is FUSO.
 File Util for Simple Object
 
 # Import
-import github.com/chixm/filedownloader
+import github.com/sysgoblin/filedownloader
 
 # How to use
 ## Example1 Most Simple Usage. Download URL file to local File Example.
