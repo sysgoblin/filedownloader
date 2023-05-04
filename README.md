@@ -12,13 +12,11 @@ Library project code is FUSO.
 
 File Util for Simple Object
 
-![](resources/fuso.jpg)
-
 # Import
 import github.com/chixm/filedownloader
 
-# How to use 
-## Example1 Most Simple Usage. Download URL file to local File Example. 
+# How to use
+## Example1 Most Simple Usage. Download URL file to local File Example.
 ```
 	fdl := filedownloader.New(nil)
 	user, _ := user.Current()
