@@ -13,6 +13,16 @@ import (
 
 const acceptRangeHeader = "Accept-Ranges"
 
+var (
+	downloadError  DownloadError = `downloadError`
+	cancelError    DownloadError = `cancelDownloadError`
+	ErrCancelCopy                = errors.New(`cancelled by context`) // ErrCancelCopy Error occur by cancel
+	copyBufferSize               = 32 * 1024
+)
+
+// DownloadError is a string used for context value key.
+type DownloadError string
+
 // getting url's head information, mostly for getting file size from Content-Length.
 func getHead(url string) (*http.Response, error) {
 	resp, err := http.Head(url)
@@ -79,13 +89,6 @@ func DownloadFile(ctx context.Context, url string, localFilePath string, downloa
 	log(`Download File Done[` + url + `]`)
 }
 
-// DownloadError is a string used for context value key.
-type DownloadError string
-
-var downloadError DownloadError = `downloadError`
-
-var cancelError DownloadError = `cancelDownloadError`
-
 // responseReader http response reader with channels
 type responseReader struct {
 	io.Reader
@@ -100,11 +103,6 @@ func (m *responseReader) Read(p []byte) (int, error) {
 
 // file download takes time if the file size was large.
 // so instead of using io package copy, I made simple cancellable copy method.
-
-// ErrCancelCopy Error occur by cancel
-var ErrCancelCopy = errors.New(`Cancelled by context`)
-
-var copyBufferSize = 32 * 1024
 
 func copyBuffer(ctx context.Context, dst io.Writer, src io.Reader, buf []byte) (written int64, err error) {
 	if buf == nil { //default buffer size
@@ -158,10 +156,7 @@ func GetFileStartOffset(localfilePath string) (int64, error) {
 
 // small files should not use resume
 func IsFileShouldResume(contentLength int64) bool {
-	if contentLength < int64(copyBufferSize*1000) {
-		return false
-	}
-	return true
+	return contentLength >= int64(copyBufferSize*1000)
 }
 
 // exmaple Range: bytes=0-1023

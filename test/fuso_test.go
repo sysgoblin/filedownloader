@@ -13,12 +13,10 @@ import (
 	ihttp "github.com/sysgoblin/filedownloader/internal/http"
 )
 
-// filedownloader test
-
 func TestSimpleSingleDownload(t *testing.T) {
 	fdl := fd.New(nil)
 	user, _ := user.Current()
-	err := fdl.SimpleFileDownload(`https://golang.org/pkg/net/http/`, user.HomeDir+`/fuso.html`)
+	err := fdl.SimpleFileDownload(`https://files.hareruyamtg.com/img/goods/L/M21/EN/0001.jpg`, user.HomeDir+`/ugin.jpg`)
 	if err != nil {
 		t.Error(err)
 	}
@@ -47,7 +45,7 @@ func TestExternalLogFunc(t *testing.T) {
 	fileDownloader := fd.New(&conf)
 	// downloading to use home
 	user, _ := user.Current()
-	fileDownloader.SimpleFileDownload(`https://golang.org/pkg/net/http/`, user.HomeDir+`/fuso.html`)
+	fileDownloader.SimpleFileDownload(`https://files.hareruyamtg.com/img/goods/L/M21/EN/0001.jpg`, user.HomeDir+`/ugin.jpg`)
 }
 
 func TestCancelWhileDownloading(t *testing.T) {

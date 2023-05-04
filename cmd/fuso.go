@@ -12,6 +12,18 @@ import (
 	ihttp "github.com/sysgoblin/filedownloader/internal/http"
 )
 
+const (
+	StateReady       state = `ready`       // StateReady is first state of instance
+	StateDownloading state = `downloading` // StateDownloading is when the download started
+	StateDone        state = `done`        // StateDone is when the download has finished or cancelled
+)
+
+var (
+	ErrDownload = errors.New(`file download error`) // ErrDownload error component of downloader
+)
+
+type state string
+
 // FileDownloader main structure
 type FileDownloader struct {
 	Conf                   *Config
@@ -38,22 +50,6 @@ type Download struct {
 	URL           string // downloading file URL
 	LocalFilePath string // local file path which URL file will be downloaded
 }
-
-// ErrDownload error component of downloader
-var ErrDownload = errors.New(`file download error`)
-
-type state string
-
-// current state of filedownloader instance
-
-// StateReady is first state of instance
-const StateReady state = `ready`
-
-// StateDownloading is when the download started
-const StateDownloading state = `downloading`
-
-// StateDone is when the download has finished or cancelled
-const StateDone state = `done`
 
 // New creates file downloader
 func New(config *Config) *FileDownloader {
@@ -177,6 +173,11 @@ func (m *FileDownloader) progressObserver(ctx context.Context, downloadedBytes <
 	m.LogFunc(`Total File Size from HTTP head Info::` + strconv.Itoa(int(m.TotalFilesSize)))
 	// every second, print how many bytes downloaded.
 	ticker := time.NewTicker(time.Second)
+
+	// init the chans for progress and speed
+	m.ProgressChan = make(chan float64)
+	m.DownloadBytesPerSecond = make(chan int64)
+
 	go func() {
 		defer close(m.ProgressChan)
 		defer close(m.DownloadBytesPerSecond)
@@ -203,7 +204,6 @@ func (m *FileDownloader) progressObserver(ctx context.Context, downloadedBytes <
 				break LOOP
 			default:
 				// noting to do
-				continue
 			}
 		}
 		m.LogFunc(`Filedownloader progress observer finished`)
