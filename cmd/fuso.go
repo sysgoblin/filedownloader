@@ -8,17 +8,31 @@ import (
 	"strconv"
 	"sync"
 	"time"
+
+	ihttp "github.com/sysgoblin/filedownloader/internal/http"
 )
+
+const (
+	StateReady       state = `ready`       // StateReady is first state of instance
+	StateDownloading state = `downloading` // StateDownloading is when the download started
+	StateDone        state = `done`        // StateDone is when the download has finished or cancelled
+)
+
+var (
+	ErrDownload = errors.New(`file download error`) // ErrDownload error component of downloader
+)
+
+type state string
 
 // FileDownloader main structure
 type FileDownloader struct {
-	conf                   *Config
+	Conf                   *Config
 	TotalFilesSize         int64
 	ProgressChan           chan float64               // 0.0 to 1.0 float value indicates progress of downloading
 	DownloadBytesPerSecond chan int64                 // downloaded bytes in last second
-	err                    error                      // error object
+	Err                    error                      // error object
 	Cancel                 func()                     // cancel downloading, if this method is called.
-	logfunc                func(param ...interface{}) // logging function
+	LogFunc                func(param ...interface{}) // logging function
 	State                  state                      // downloading state of filedownloader
 }
 
@@ -28,7 +42,7 @@ type Config struct {
 	MaxRetry               int                        // retry count of file downloading, when download fails default is 0
 	DownloadTimeoutMinutes int                        // download timeout minutes, default is 60
 	RequiresDetailProgress bool                       // If true you can receive progress value from ProgressChan and downloadBytesPerSecond
-	logfunc                func(param ...interface{}) // logging function
+	LogFunc                func(param ...interface{}) // logging function
 }
 
 // Download target url to download and local path to be downloaded
@@ -36,22 +50,6 @@ type Download struct {
 	URL           string // downloading file URL
 	LocalFilePath string // local file path which URL file will be downloaded
 }
-
-// ErrDownload error component of downloader
-var ErrDownload = errors.New(`File Download Error`)
-
-type state string
-
-// current state of filedownloader instance
-
-// StateReady is first state of instance
-const StateReady state = `ready`
-
-// StateDownloading is when the download started
-const StateDownloading state = `downloading`
-
-// StateDone is when the download has finished or cancelled
-const StateDone state = `done`
 
 // New creates file downloader
 func New(config *Config) *FileDownloader {
@@ -61,16 +59,16 @@ func New(config *Config) *FileDownloader {
 	if config.MaxDownloadThreads == 0 {
 		panic(`Check Configuration again. You can't download file if MaxDownloadThreads is 0`)
 	}
-	instance := &FileDownloader{conf: config}
+	instance := &FileDownloader{Conf: config}
 	// set default logger if not configured log function is not set.
-	if config.logfunc == nil {
-		instance.logfunc = fdlLog
+	if config.LogFunc == nil {
+		instance.LogFunc = fdlLog
 	} else {
 		// external log function
-		instance.logfunc = config.logfunc
+		instance.LogFunc = config.LogFunc
 	}
 	// create progress channels
-	if instance.conf.RequiresDetailProgress {
+	if instance.Conf.RequiresDetailProgress {
 		progress := make(chan float64, 10)
 		speed := make(chan int64, 10)
 		instance.ProgressChan = progress
@@ -91,7 +89,7 @@ func (m *FileDownloader) SimpleFileDownload(url, localFilePath string) error {
 	list = append(list, &d)
 	// very simple single file download
 	m.downloadFiles(list)
-	return m.err
+	return m.Err
 }
 
 // MultipleFileDownload downloads multiple files at parallel in configured download threads.
@@ -101,7 +99,7 @@ func (m *FileDownloader) MultipleFileDownload(downloads []*Download) error {
 	}
 	m.State = StateDownloading
 	m.downloadFiles(downloads)
-	return m.err
+	return m.Err
 }
 
 func (m *FileDownloader) downloadFiles(downloads []*Download) {
@@ -109,14 +107,14 @@ func (m *FileDownloader) downloadFiles(downloads []*Download) {
 		m.State = StateDone
 	}()
 	downloadFilesCnt := len(downloads)
-	m.logfunc(`Download Files: ` + strconv.Itoa(downloadFilesCnt))
+	m.LogFunc(`Download Files: ` + strconv.Itoa(downloadFilesCnt))
 	// context for cancel and timeout
-	ctx, timeoutFunc := context.WithTimeout(context.Background(), time.Minute*time.Duration(m.conf.DownloadTimeoutMinutes))
+	ctx, timeoutFunc := context.WithTimeout(context.Background(), time.Minute*time.Duration(m.Conf.DownloadTimeoutMinutes))
 	defer timeoutFunc()
 	// if the url allows head access and returns Content-Length, we can calculate progress of downloading files.
 	var resumableUrls = make(map[string]*resumeInfo)
 	for _, d := range downloads {
-		size, resumable, err := getFileSizeAndResumable(d.URL)
+		size, resumable, err := ihttp.GetFileSizeAndResumable(d.URL)
 		if err != nil || size < 0 {
 			panic(`Could not get whole size of the downloading file. No progress value is available`)
 		}
@@ -128,13 +126,13 @@ func (m *FileDownloader) downloadFiles(downloads []*Download) {
 	defer close(downloadedBytes)
 	// observe progress
 	m.progressObserver(ctx, downloadedBytes)
-	m.logfunc(fmt.Sprintf("Total Download Bytes:: %d", m.TotalFilesSize))
+	m.LogFunc(fmt.Sprintf("Total Download Bytes:: %d", m.TotalFilesSize))
 	// Limit maximum download goroutines since network resource is not inifinite.
 	dlCond := sync.NewCond(&sync.Mutex{})
 	currentThreadCnt := 0
 	var wg sync.WaitGroup
 	// download context
-	ctx2, timeoutFunc := context.WithTimeout(ctx, time.Minute*time.Duration(m.conf.DownloadTimeoutMinutes))
+	ctx2, timeoutFunc := context.WithTimeout(ctx, time.Minute*time.Duration(m.Conf.DownloadTimeoutMinutes))
 	defer timeoutFunc()
 	ctx3, cancelFunc := context.WithCancel(ctx2)
 	defer cancelFunc()
@@ -149,32 +147,37 @@ func (m *FileDownloader) downloadFiles(downloads []*Download) {
 		go func() {
 			defer wg.Done()
 			defer dlCond.Signal()
-			downloadFile(ctx3, url, localPath, downloadedBytes, useResume, resume.contentLength, m.logfunc)
+			ihttp.DownloadFile(ctx3, url, localPath, downloadedBytes, useResume, resume.contentLength, m.LogFunc)
 		}()
 		currentThreadCnt++
 		// stop for loop when reached to max threads.
 		dlCond.L.Lock()
-		if m.conf.MaxDownloadThreads < currentThreadCnt {
-			m.logfunc(`Cond locked. download goroutine reached to max`)
+		if m.Conf.MaxDownloadThreads < currentThreadCnt {
+			m.LogFunc(`Cond locked. download goroutine reached to max`)
 			dlCond.Wait()
-			m.logfunc(`Cond released. goes to next file download if more.`)
+			m.LogFunc(`Cond released. goes to next file download if more.`)
 			currentThreadCnt--
 		}
 		dlCond.L.Unlock()
 	}
-	m.logfunc(`Wait group is waiting for download.`)
+	m.LogFunc(`Wait group is waiting for download.`)
 	// wait for all download ends.
 	wg.Wait()
 	// at last get the context error
-	m.err = ctx.Err()
-	m.logfunc(`All Download Task Done.`)
+	m.Err = ctx.Err()
+	m.LogFunc(`All Download Task Done.`)
 }
 
 func (m *FileDownloader) progressObserver(ctx context.Context, downloadedBytes <-chan int) {
 	var totaloDownloadedBytes int64
-	m.logfunc(`Total File Size from HTTP head Info::` + strconv.Itoa(int(m.TotalFilesSize)))
+	m.LogFunc(`Total File Size from HTTP head Info::` + strconv.Itoa(int(m.TotalFilesSize)))
 	// every second, print how many bytes downloaded.
 	ticker := time.NewTicker(time.Second)
+
+	// init the chans for progress and speed
+	m.ProgressChan = make(chan float64)
+	m.DownloadBytesPerSecond = make(chan int64)
+
 	go func() {
 		defer close(m.ProgressChan)
 		defer close(m.DownloadBytesPerSecond)
@@ -185,25 +188,25 @@ func (m *FileDownloader) progressObserver(ctx context.Context, downloadedBytes <
 			select {
 			case <-ticker.C:
 				sub := totaloDownloadedBytes - lastProgress
-				m.logfunc(fmt.Sprintf(`downloaded %d bytes per second, downloaded %d / %d`, sub, totaloDownloadedBytes, m.TotalFilesSize))
+				m.LogFunc(fmt.Sprintf(`downloaded %d bytes per second, downloaded %d / %d`, sub, totaloDownloadedBytes, m.TotalFilesSize))
 				lastProgress = totaloDownloadedBytes
-				if m.conf.RequiresDetailProgress {
+				if m.Conf.RequiresDetailProgress {
 					m.DownloadBytesPerSecond <- sub
 					// send progress value to channel. progress should be between 0.0 to 1.0.
 					p := float64(totaloDownloadedBytes) / float64(m.TotalFilesSize)
 					m.ProgressChan <- p
 				}
 			case t := <-downloadedBytes:
-				// m.logfunc(`Incomming bytes :` + strconv.Itoa(t))
+				// m.LogFunc(`Incomming bytes :` + strconv.Itoa(t))
 				totaloDownloadedBytes += int64(t)
 			case <-ctx.Done():
-				m.logfunc(`Progress Observer Done.`)
+				m.LogFunc(`Progress Observer Done.`)
 				break LOOP
 			default:
 				// noting to do
 			}
 		}
-		m.logfunc(`Filedownloader progress observer finished`)
+		m.LogFunc(`Filedownloader progress observer finished`)
 	}()
 }
 

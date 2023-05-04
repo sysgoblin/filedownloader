@@ -1,3 +1,3 @@
-module github.com/chixm/filedownloader
+module github.com/sysgoblin/filedownloader
 
-go 1.15
+go 1.20
