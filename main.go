@@ -19,12 +19,12 @@ func main() {
 		},
 		&cli.StringFlag{
 			Name:  "file",
-			Usage: "file containing urls to download",
+			Usage: "file containing a list of newline separated urls to download",
 		},
 		&cli.BoolFlag{
 			Name:  "tor",
 			Value: false,
-			Usage: "download the given url through tor",
+			Usage: "download the given url through local tor proxy (127.0.0.1:9050)",
 		},
 		&cli.IntFlag{
 			Name:  "threads",
