@@ -1,4 +1,4 @@
-module github.com/sysgoblin/filedownloader
+module github.com/sysgoblin/godownload
 
 go 1.20
 

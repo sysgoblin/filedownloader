@@ -1,16 +1,16 @@
 package test
 
 import (
-	"fmt"
 	"log"
+	"os"
 	"os/user"
 	_ "strconv"
 	_ "sync"
 	"testing"
 	"time"
 
-	fd "github.com/sysgoblin/filedownloader/cmd"
-	ihttp "github.com/sysgoblin/filedownloader/internal/http"
+	fd "github.com/sysgoblin/godownload/cmd"
+	ihttp "github.com/sysgoblin/godownload/internal/http"
 )
 
 func TestSimpleSingleDownload(t *testing.T) {
@@ -20,6 +20,8 @@ func TestSimpleSingleDownload(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
+	// cleanup
+	os.Remove(user.HomeDir + `/ugin.jpg`)
 }
 
 func TestMultipleFilesDownload(t *testing.T) {
@@ -33,11 +35,9 @@ func TestMultipleFilesDownload(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-}
-
-func TestFloatProgressCalc(t *testing.T) {
-	v := float64(123 / float64(177476))
-	fmt.Println(v)
+	// cleanup
+	os.Remove(user.HomeDir + `/ugin.jpg`)
+	os.Remove(user.HomeDir + `/korvold.jpg`)
 }
 
 func TestExternalLogFunc(t *testing.T) {
@@ -68,6 +68,8 @@ func TestCancelWhileDownloading(t *testing.T) {
 		t.Error(fileDownloader.Err)
 	}
 	t.Log(`Test Done`)
+	// cleanup
+	os.Remove(user.HomeDir + `/512.zip`)
 }
 
 func TestFileDownloadWithDetailedConfiguration(t *testing.T) {
@@ -135,7 +137,7 @@ func TestMultiFileDownloadCancelWhileDownloading(t *testing.T) {
 }
 
 func myLogger(params ...interface{}) {
-	//log.Println(`debug ::`, params)
+	log.Println(`debug ::`, params)
 }
 
 func TestFileExists(t *testing.T) {

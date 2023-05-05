@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	ihttp "github.com/sysgoblin/filedownloader/internal/http"
+	ihttp "github.com/sysgoblin/godownload/internal/http"
 )
 
 const (

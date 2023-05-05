@@ -1,102 +1,31 @@
-# filedownloader
- Download File from Internet
+# godownload
+A small cli go app to download file(s) from the internet.
+Provide either a URL to a file to download, or a plain text file containing a list of URLs to process.
 
-# Multipurpose File Downloader for Go
-- Easy to download files from internet
-- Progress Channel to receive downloading progress
-- Multiple Download with Multiple Thread
-- Able to configure Logging Function
-
-# FUSO
-Library project code is FUSO.
-
-File Util for Simple Object
-
-# Import
-import github.com/sysgoblin/filedownloader
-
-# How to use
-## Example1 Most Simple Usage. Download URL file to local File Example.
-```
-	fdl := filedownloader.New(nil)
-	user, _ := user.Current()
-	err := fdl.SimpleFileDownload(`https://golang.org/pkg/net/http/`, user.HomeDir+`/fuso.html`)
-	if err != nil {
-		log.Println(err)
-	}
-```
-
-## Example2: Multiple Files Download From Internet
-Simply, put Url and local file path to Download structure slice and call MultipleFileDownload
-```
-	fdl := New(nil)
-	user, _ := user.Current()
-	// Download Progress Observer
-	var downloadFiles []*Download
-	downloadFiles = append(downloadFiles, &Download{URL: `https://files.hareruyamtg.com/img/goods/L/M21/EN/0001.jpg`, LocalFilePath: user.HomeDir + `/ugin.jpg`})
-	downloadFiles = append(downloadFiles, &Download{URL: `https://files.hareruyamtg.com/img/goods/L/ELD/EN/BRAWL0329.jpg`, LocalFilePath: user.HomeDir + `/korvold.jpg`})
-	err := fdl.MultipleFileDownload(downloadFiles)
-	if err != nil {
-		t.Error(err)
-	}
-```
-
-## Self defined Log functions
-FUSO writes log by Golang "log" library by default.
-You can configure Config and set your own logger.
+The downloader will first gather the total size of all files to download, and track progress. Downloading is resumable, so if the command is stopped while downloading a large file, running the command again will continue the download as long as the partially complete file is still present locally.
 
 ```
-conf := Config{logfunc: myLogger}
-	fileDownloader := New(&conf)
-	// downloading to use home
-	user, _ := user.Current()
-	fileDownloader.SimpleFileDownload(`https://golang.org/pkg/net/http/`, user.HomeDir+`/fuso.html`)
+NAME:
+   godownload - download file(s) from provided url(s)
 
-...
+USAGE:
+   godownload [global options] command [command options] [arguments...]
 
-func myLogger(params ...interface{}) {
-	log.Println(`log prefix`, params)
-}
+VERSION:
+   0.0.1
 
+COMMANDS:
+   help, h  Shows a list of commands or help for one command
+
+GLOBAL OPTIONS:
+   --url value      url to download
+   --file value     file containing a list of newline separated urls to download
+   --tor            download the given url through local tor proxy (127.0.0.1:9050) (default: false)
+   --threads value  number of threads to use for downloading from multiple urls (default: 3)
+   --retries value  number of retries to attempt when downloading (default: 0)
+   --timeout value  number of minutes to download before timing out (default: 60)
+   --help, -h       show help
+   --version, -v    print the version
 ```
 
-## Configure RequiresDetailProgress And Receive Progress
-You can show downloading progress and downloading speed if you need.
-Set RequiresDetailProgress: true in Config and write channel receives progress data.
-
-See example below,
-```
-	// default setting of RequiresDetailProgress is false, you need to set it true if you need download progress.
-	conf := Config{logfunc: myLogger, MaxDownloadThreads: 1, DownloadTimeoutMinutes: 3, MaxRetry: 3, RequiresDetailProgress: true}
-	fileDownloader := New(&conf)
-
-	done := make(chan int)
-	// if you set RequiresDetailProgress = true, you can receive progress from channel
-	go func() {
-	LOOP:
-		for {
-			select {
-			case speed := <-fileDownloader.DownloadBytesPerSecond:
-				// DownloadBytesPerSecond Channel can receive how fast the download is running.
-				log.Println(fmt.Sprintf(`%d bytes/sec`, speed))
-			case progress := <-fileDownloader.ProgressChan:
-				// Progress Channel (ProgressChan) receives how much download has progressed.
-				log.Println(fmt.Sprintf(`%f percent has done`, progress)) // ex. 10.5 percent has done
-			case <-done:
-				break LOOP // escape from forever loop
-			}
-		}
-	}()
-
-	// downloading file to use home directory
-	user, _ := user.Current()
-	// test download file 512MB
-	err := fileDownloader.SimpleFileDownload(`http://ipv4.download.thinkbroadband.com/512MB.zip`, user.HomeDir+`/512.zip`)
-	if err != nil {
-		done <- 1
-	}
-	if fileDownloader.err != nil {
-		log.Println(fileDownloader.err)
-	}
-	done <- 0
-```
+A repurposed fork of https://github.com/chixm/filedownloader

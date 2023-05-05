@@ -3,13 +3,13 @@ package main
 import (
 	"os"
 
-	filedownloader "github.com/sysgoblin/filedownloader/cmd"
+	filedownloader "github.com/sysgoblin/godownload/cmd"
 	"github.com/urfave/cli/v2"
 )
 
 func main() {
 	app := &cli.App{}
-	app.Name = "filedownloader"
+	app.Name = "godownload"
 	app.Usage = "download file(s) from provided url(s)"
 	app.Version = "0.0.1"
 	app.Flags = []cli.Flag{
@@ -19,12 +19,12 @@ func main() {
 		},
 		&cli.StringFlag{
 			Name:  "file",
-			Usage: "file containing urls to download",
+			Usage: "file containing a list of newline separated urls to download",
 		},
 		&cli.BoolFlag{
 			Name:  "tor",
 			Value: false,
-			Usage: "download the given url through tor",
+			Usage: "download the given url through local tor proxy (127.0.0.1:9050)",
 		},
 		&cli.IntFlag{
 			Name:  "threads",
