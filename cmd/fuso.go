@@ -43,6 +43,7 @@ type Config struct {
 	DownloadTimeoutMinutes int                        // download timeout minutes, default is 60
 	RequiresDetailProgress bool                       // If true you can receive progress value from ProgressChan and downloadBytesPerSecond
 	LogFunc                func(param ...interface{}) // logging function
+	Proxy                  string                     // proxy to use for downloading
 }
 
 // Download target url to download and local path to be downloaded
@@ -114,7 +115,7 @@ func (m *FileDownloader) downloadFiles(downloads []*Download) {
 	// if the url allows head access and returns Content-Length, we can calculate progress of downloading files.
 	var resumableUrls = make(map[string]*resumeInfo)
 	for _, d := range downloads {
-		size, resumable, err := ihttp.GetFileSizeAndResumable(d.URL)
+		size, resumable, err := ihttp.GetFileSizeAndResumable(d.URL, m.Conf.Proxy)
 		if err != nil || size < 0 {
 			panic(`Could not get whole size of the downloading file. No progress value is available`)
 		}
@@ -147,7 +148,7 @@ func (m *FileDownloader) downloadFiles(downloads []*Download) {
 		go func() {
 			defer wg.Done()
 			defer dlCond.Signal()
-			ihttp.DownloadFile(ctx3, url, localPath, downloadedBytes, useResume, resume.contentLength, m.LogFunc)
+			ihttp.DownloadFile(ctx3, url, localPath, downloadedBytes, useResume, resume.contentLength, m.LogFunc, m.Conf.Proxy)
 		}()
 		currentThreadCnt++
 		// stop for loop when reached to max threads.

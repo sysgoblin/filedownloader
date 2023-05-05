@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	_url "net/url"
 	"os"
 )
 
@@ -24,7 +25,15 @@ var (
 type DownloadError string
 
 // getting url's head information, mostly for getting file size from Content-Length.
-func getHead(url string) (*http.Response, error) {
+func getHead(url string, proxy string) (*http.Response, error) {
+	// set the proxy for the request
+	if proxy != "" {
+		proxyURL, err := _url.Parse(proxy)
+		if err != nil {
+			return nil, err
+		}
+		http.DefaultClient.Transport = &http.Transport{Proxy: http.ProxyURL(proxyURL)}
+	}
 	resp, err := http.Head(url)
 	if err != nil {
 		return nil, err
@@ -33,8 +42,8 @@ func getHead(url string) (*http.Response, error) {
 }
 
 // get content-length from header
-func GetFileSizeAndResumable(url string) (int64, bool, error) {
-	resp, err := getHead(url)
+func GetFileSizeAndResumable(url string, proxy string) (int64, bool, error) {
+	resp, err := getHead(url, proxy)
 	if err != nil {
 		return 0, false, err
 	}
@@ -48,7 +57,17 @@ func GetFileSizeAndResumable(url string) (int64, bool, error) {
 }
 
 // Download Single File
-func DownloadFile(ctx context.Context, url string, localFilePath string, downloadedBytes chan int, useResume bool, filesize int64, log func(param ...interface{})) {
+func DownloadFile(ctx context.Context, url string, localFilePath string, downloadedBytes chan int, useResume bool, filesize int64, log func(param ...interface{}), proxy string) {
+	// if proxy has been provided we need to set the client transport for the http client
+	if proxy != "" {
+		proxyURL, err := _url.Parse(proxy)
+		if err != nil {
+			ctx = context.WithValue(ctx, downloadError, err)
+			return
+		}
+		http.DefaultClient.Transport = &http.Transport{Proxy: http.ProxyURL(proxyURL)}
+	}
+
 	select {
 	case <-ctx.Done():
 		log(`Download Cancelled by context`)
