@@ -3,13 +3,13 @@ package main
 import (
 	"os"
 
-	filedownloader "github.com/sysgoblin/filedownloader/cmd"
+	filedownloader "github.com/sysgoblin/godownload/cmd"
 	"github.com/urfave/cli/v2"
 )
 
 func main() {
 	app := &cli.App{}
-	app.Name = "filedownloader"
+	app.Name = "godownload"
 	app.Usage = "download file(s) from provided url(s)"
 	app.Version = "0.0.1"
 	app.Flags = []cli.Flag{
